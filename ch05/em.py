@@ -1,6 +1,7 @@
 import os
 
 import numpy as np
+import matplotlib.pyplot as plt
 
 
 def multivariate_normal(x, mu, cov):
@@ -31,6 +32,22 @@ def likelihood(xs, phis, mus, covs):
     return L / N
 
 
+def plot_contour(w, mus, covs):
+    x = np.arange(1, 6, 0.1)
+    y = np.arange(40, 100, 1)
+    X, Y = np.meshgrid(x, y)
+    Z = np.zeros_like(X)
+
+    for i in range(X.shape[0]):
+        for j in range(X.shape[1]):
+            x = np.array([X[i, j], Y[i, j]])
+
+            for k in range(len(mus)):
+                mu, cov = mus[k], covs[k]
+                Z[i, j] += w[k] * multivariate_normal(x, mu, cov)
+    plt.contour(X, Y, Z)
+
+
 def main():
     path = os.path.join(os.path.dirname(__file__), "old_faithful.txt")
     xs = np.loadtxt(path)
@@ -45,6 +62,8 @@ def main():
     MAX_ITERS = 100
     THRESHOLD = 1e-4
 
+    current_likelihood = likelihood(xs, phis, mus, covs)
+
     for iter in range(MAX_ITERS):
         # E-step
         qs = np.zeros((N, K))
@@ -56,6 +75,39 @@ def main():
             qs[n] /= gmm(x, phis, mus, covs)
 
         # M-step
+        qs_sum = qs.sum(axis=0)
+        for k in range(K):
+            # 1. phis
+            phis[k] = qs_sum[k] / N
+
+            # 2. mus
+            c = 0
+            for n in range(N):
+                c += qs[n, k] * xs[n]
+            mus[k] = c / qs_sum[k]
+
+            # 3. covs
+            c = 0
+            for n in range(N):
+                z = xs[n] - mus[k]
+                z = z[:, np.newaxis]
+                c += qs[n, k] * z @ z.T
+            covs[k] = c / qs_sum[k]
+
+        # Check whether we should stop loop
+        print(f'{current_likelihood:.3f}')
+
+        next_likelihood = likelihood(xs, phis, mus, covs)
+        diff = np.abs(next_likelihood - current_likelihood)
+        if diff < THRESHOLD:
+            break
+        current_likelihood = next_likelihood
+
+    plt.scatter(xs[:,0], xs[:,1])
+    plot_contour(phis, mus, covs)
+    plt.xlabel('Eruptions(Min)')
+    plt.ylabel('Waiting(Min)')
+    plt.show()
 
 
 if __name__ == "__main__":
