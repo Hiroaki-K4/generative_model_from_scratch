@@ -7,14 +7,6 @@ import torchvision
 from torchvision import datasets, transforms
 
 
-input_dim = 784
-hidden_dim = 200
-latent_dim = 20
-epochs = 30
-learning_rate = 3e-4
-batch_size = 32
-
-
 class Encoder(nn.Module):
     def __init__(self, input_dim, hidden_dim, latent_dim):
         super().__init__()
@@ -43,3 +35,65 @@ class Decoder(nn.Module):
         h = self.linear2(h)
         x_hat = F.sigmoid(h)
         return x_hat
+
+
+def reparameterize(mu, sigma):
+    eps = torch.randn_like(sigma)
+    z = mu + eps * sigma
+    return z
+
+
+class VAE(nn.Module):
+    def __init__(self, input_dim, hidden_dim, latent_dim):
+        super().__init__()
+        self.encoder = Encoder(input_dim, hidden_dim, latent_dim)
+        self.decoder = Decoder(latent_dim, hidden_dim, input_dim)
+
+    def get_loss(self, x):
+        mu, sigma = self.encoder(x)
+        z = reparameterize(mu, sigma)
+        x_hat = self.decoder(z)
+
+        batch_size = len(x)
+        L1 = F.mse_loss(x_hat, x, reduction="sum")
+        L2 = -torch.sum(1 + torch.log(sigma**2) - mu**2 - sigma**2)
+        return (L1 + L2) / batch_size
+
+
+if __name__ == "__main__":
+    input_dim = 784
+    hidden_dim = 200
+    latent_dim = 20
+    epochs = 30
+    learning_rate = 3e-4
+    batch_size = 32
+
+    transform = transforms.Compose(
+        [transforms.ToTensor(), transforms.Lambda(torch.flatten)]
+    )
+    dataset = datasets.MNIST(
+        root="./data", train=True, download=True, transform=transform
+    )
+    dataloader = torch.utils.data.DataLoader(
+        dataset, batch_size=batch_size, shuffle=True
+    )
+
+    model = VAE(input_dim, hidden_dim, latent_dim)
+    optimizer = optim.Adam(model.parameters(), lr=learning_rate)
+    losses = []
+
+    for epoch in range(epochs):
+        loss_sum = 0.0
+        cnt = 0
+        for x, label in dataloader:
+            optimizer.zero_grad()
+            loss = model.get_loss(x)
+            loss.backward()
+            optimizer.step()
+
+            loss_sum += loss.item()
+            cnt += 1
+
+        loss_avg = loss_sum / cnt
+        losses.append(loss_avg)
+        print(loss_avg)
