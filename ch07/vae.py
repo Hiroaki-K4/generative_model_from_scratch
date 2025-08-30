@@ -97,3 +97,17 @@ if __name__ == "__main__":
         loss_avg = loss_sum / cnt
         losses.append(loss_avg)
         print(loss_avg)
+
+    with torch.no_grad():
+        sample_size = 64
+        z = torch.randn(sample_size, latent_dim)
+        x = model.decoder(z)
+        generated_images = x.view(sample_size, 1, 28, 28)
+
+    grid_img = torchvision.utils.make_grid(
+        generated_images, nrow=8, padding=2, normalize=True
+    )
+
+    plt.imshow(grid_img.permute(1, 2, 0))
+    plt.axis("off")
+    plt.show()
